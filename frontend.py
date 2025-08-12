@@ -14,8 +14,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Constants
-API_URL = "http://localhost:8000"
+# Constants - Updated for production deployment
+API_URL = os.getenv("BACKEND_URL", "https://ai-legal-assistant-1-8lhl.onrender.com")
 
 def upload_files(files):
     """Upload files to the API"""
@@ -24,7 +24,7 @@ def upload_files(files):
     
     files_for_upload = [("files", file) for file in files]
     try:
-        response = requests.post(f"{API_URL}/upload", files=files_for_upload)
+        response = requests.post(f"{API_URL}/upload", files=files_for_upload, timeout=30)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -34,7 +34,7 @@ def upload_files(files):
 def get_documents():
     """Get list of uploaded documents"""
     try:
-        response = requests.get(f"{API_URL}/documents")
+        response = requests.get(f"{API_URL}/documents", timeout=30)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -48,7 +48,8 @@ def chat_with_documents(message: str, session_id: str = None):
         response = requests.post(
             f"{API_URL}/chat",
             json=payload,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
+            timeout=60  # Longer timeout for AI processing
         )
         response.raise_for_status()
         return response.json()
@@ -59,7 +60,7 @@ def chat_with_documents(message: str, session_id: str = None):
 def delete_document(document_id: str):
     """Delete a document"""
     try:
-        response = requests.delete(f"{API_URL}/documents/{document_id}")
+        response = requests.delete(f"{API_URL}/documents/{document_id}", timeout=30)
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as e:
@@ -74,6 +75,14 @@ def clear_chat_history():
 def format_timestamp():
     """Get formatted timestamp"""
     return datetime.now().strftime("%I:%M %p")
+
+def check_api_health():
+    """Check if the API is accessible"""
+    try:
+        response = requests.get(f"{API_URL}/", timeout=10)
+        return response.status_code == 200
+    except:
+        return False
 
 def main():
     # Custom CSS with modern design
@@ -572,8 +581,50 @@ def main():
             60% { content: '..'; }
             80%, 100% { content: '...'; }
         }
+
+        /* API Status indicator */
+        .api-status {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+        }
+        
+        .api-online {
+            background: rgba(52, 211, 153, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+        
+        .api-offline {
+            background: rgba(248, 113, 113, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(248, 113, 113, 0.3);
+        }
         </style>
     """, unsafe_allow_html=True)
+
+    # Check API health and show status
+    api_healthy = check_api_health()
+    status_class = "api-online" if api_healthy else "api-offline"
+    status_text = "🟢 API Online" if api_healthy else "🔴 API Offline"
+    
+    st.markdown(f"""
+        <div class="api-status {status_class}">
+            {status_text}
+        </div>
+    """, unsafe_allow_html=True)
+
+    if not api_healthy:
+        st.error("⚠️ Cannot connect to the backend API. Please check if the backend service is running.")
+        st.info(f"Expected API URL: {API_URL}")
+        return
 
     # Initialize session states
     if "chat_history" not in st.session_state:
@@ -593,7 +644,7 @@ def main():
         """, unsafe_allow_html=True)
         
         # Get documents for stats
-        documents = get_documents()
+        documents = get_documents() if api_healthy else []
         
         # Statistics
         total_docs = len(documents)
@@ -648,7 +699,23 @@ def main():
         if st.button("🔄 Refresh", use_container_width=True):
             st.rerun()
 
+        # Backend info
+        st.markdown("---")
+        st.markdown("### System Info")
+        st.markdown(f"**Backend:** `{API_URL}`")
+        st.markdown(f"**Status:** {'🟢 Connected' if api_healthy else '🔴 Disconnected'}")
+
     # Main content area
+    if not api_healthy:
+        st.markdown("""
+            <div class="welcome-card">
+                <h2>🔧 Backend Connection Issue</h2>
+                <p>The application cannot connect to the backend API. This might happen during initial deployment while the service is starting up.</p>
+                <p><strong>Please wait a few moments and refresh the page.</strong></p>
+            </div>
+        """, unsafe_allow_html=True)
+        return
+
     if st.session_state.current_view == "chat":
         show_chat_interface(documents)
     elif st.session_state.current_view == "documents":
@@ -802,13 +869,13 @@ def show_document_management(documents):
                 with col1:
                     st.markdown(f"""
                         <div class="document-card">
-                            <h4 style="margin: 0 0 0.5rem 0; color: #2d3748;">
+                            <h4 style="margin: 0 0 0.5rem 0; color: rgba(255, 255, 255, 0.95);">
                                 📄 {doc.get('filename', 'Unknown Document')}
                             </h4>
                             <div class="document-status {status_class}">
                                 {emoji} {status_text}
                             </div>
-                            {f"<p style='margin-top: 1rem; color: #718096; font-size: 0.9rem;'>Uploaded: {doc.get('created_at', 'Unknown')}</p>" if doc.get('created_at') else ""}
+                            {f"<p style='margin-top: 1rem; color: rgba(255, 255, 255, 0.7); font-size: 0.9rem;'>Uploaded: {doc.get('created_at', 'Unknown')}</p>" if doc.get('created_at') else ""}
                         </div>
                     """, unsafe_allow_html=True)
                 
@@ -899,9 +966,9 @@ def show_analytics(documents):
             content_preview = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
             
             st.markdown(f"""
-                <div style="padding: 1rem; margin: 0.5rem 0; background: white; border-radius: 10px; border-left: 4px solid #667eea;">
+                <div style="padding: 1rem; margin: 0.5rem 0; background: rgba(255, 255, 255, 0.08); border-radius: 10px; border-left: 4px solid #F87060;">
                     <strong>{role_icon} {role_name}</strong>
-                    <p style="margin: 0.5rem 0 0 0; color: #718096;">{content_preview}</p>
+                    <p style="margin: 0.5rem 0 0 0; color: rgba(255, 255, 255, 0.7);">{content_preview}</p>
                 </div>
             """, unsafe_allow_html=True)
     else:
