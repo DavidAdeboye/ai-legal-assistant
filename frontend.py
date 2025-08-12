@@ -745,14 +745,11 @@ def show_chat_interface(documents):
                     if msg.get("sources"):
                         with st.expander("📚 Legal References & Citations"):
                             for idx, source in enumerate(msg["sources"], 1):
-                                st.markdown(f"""
-                                    <div class="source-citation">
-                                        <strong>📄 Reference {idx}:</strong> {source.get('filename', 'Unknown')}
-                                        <br/>
-                                        <strong>Section:</strong> {source.get('section', 'General')}
-                                        {f"<br/><strong>Page:</strong> {source.get('page', 'N/A')}" if source.get('page') else ""}
-                                    </div>
-                                """, unsafe_allow_html=True)
+                                st.write(f"📄 **Reference {idx}:** {source.get('filename', 'Unknown')}")
+                                st.write(f"**Section:** {source.get('section', 'General')}")
+                                if source.get('page'):
+                                    st.write(f"**Page:** {source.get('page', 'N/A')}")
+                                st.write("---")
 
 def show_document_management(documents):
     """Display document management interface"""

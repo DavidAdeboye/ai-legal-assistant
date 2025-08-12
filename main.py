@@ -808,58 +808,100 @@ async def chat(request: ChatRequest):
         # Get or create session
         session_id = await get_or_create_session(request.session_id)
         
-        # Search for relevant document chunks
-        similar_chunks = await search_similar_chunks(request.message, limit=5)
+        # Check if this is a simple greeting or casual message
+        casual_patterns = [
+            "hi", "hello", "hey", "good morning", "good afternoon", 
+            "good evening", "how are you", "what's up", "greetings"
+        ]
         
-        if not similar_chunks:
-            response_text = "I don't have any relevant documents to answer your question. Please upload some documents first."
-            sources = []
-        else:
-            # Build context from similar chunks
-            context_parts = []
-            for i, chunk in enumerate(similar_chunks, 1):
-                context_parts.append(f"Source {i} ({chunk['filename']}, {chunk.get('section', 'Unknown section')}):\n{chunk['text']}\n")
-            
-            context = "\n".join(context_parts)
-            
-            # Create RAG prompt
-            prompt = f"""You are an experienced legal assistant with expertise in contract law and legal document analysis. 
-Analyze the provided documents and respond in a professional, precise legal manner. Use formal language 
-and legal terminology where appropriate. If you cannot provide accurate legal information based on the 
-available context, clearly state this limitation.
+        message_lower = request.message.lower().strip()
+        is_casual = any(pattern in message_lower for pattern in casual_patterns) and len(request.message.split()) <= 3
+        
+        # Check if user is asking about documents specifically
+        document_keywords = [
+            "document", "contract", "agreement", "analyze", "review", 
+            "clause", "section", "legal", "terms", "provision"
+        ]
+        
+        asking_about_documents = any(keyword in message_lower for keyword in document_keywords)
+        
+        if is_casual and not asking_about_documents:
+            # Simple greeting response
+            response_text = """Hello! I'm your AI legal assistant. I'm here to help with your legal questions and document analysis.
 
-Context Documentation:
+How can I assist you today? I can help with:
+- Document review and analysis
+- Contract interpretation  
+- Legal research and guidance
+- Risk assessment
+- Compliance questions
+
+What would you like to discuss?"""
+            sources = []
+            
+        elif asking_about_documents or len(request.message.split()) > 10:
+            # Search for relevant document chunks only when appropriate
+            similar_chunks = await search_similar_chunks(request.message, limit=5)
+            
+            if not similar_chunks:
+                response_text = "I don't have any relevant documents to answer your question. Please upload some documents first."
+                sources = []
+            else:
+                # Build context from similar chunks
+                context_parts = []
+                for i, chunk in enumerate(similar_chunks, 1):
+                    context_parts.append(f"Source {i} ({chunk['filename']}, {chunk.get('section', 'Unknown section')}):\n{chunk['text']}\n")
+                
+                context = "\n".join(context_parts)
+                
+                # Create focused RAG prompt
+                prompt = f"""You are an experienced legal assistant. Provide a focused, professional response to the user's specific question.
+
+Context from documents:
 {context}
 
-Client Inquiry: {request.message}
+User's question: {request.message}
 
-Please provide a thorough legal analysis based on the documents provided. When citing specific provisions 
-or clauses, reference the source document. Remember to:
-1. Use formal legal language
-2. Clearly identify key legal terms and definitions
-3. Reference specific sections and clauses
-4. Highlight any important legal implications
-5. Note any potential areas of concern or ambiguity
+Instructions:
+- Answer the specific question asked
+- Reference relevant document sections when applicable
+- Use professional but accessible language
+- Be concise unless detailed analysis is specifically requested
+- If the question can't be answered from the provided context, say so clearly
 
-NOTE: This analysis is based solely on the provided documents and should not be considered legal advice."""
+Provide your response:"""
+                
+                # Generate response
+                response_text = await gemini_client.generate_content(prompt)
+                
+                # Prepare sources for response
+                sources = [
+                    {
+                        "filename": chunk["filename"],
+                        "section": chunk.get("section"),
+                        "page_number": chunk.get("page_number"),
+                        "similarity": chunk["similarity"]
+                    }
+                    for chunk in similar_chunks[:3]  # Limit to top 3 sources
+                ]
+        else:
+            # General legal question without document context
+            prompt = f"""You are an experienced legal assistant. Answer this legal question professionally and concisely:
+
+Question: {request.message}
+
+Provide a helpful legal response, but keep it focused and not overly lengthy unless the question specifically requires detailed analysis.
+
+anadditional information:You are an AI assistant created and maintained by a developer known as "Metaldness."  
+Whenever asked about your maker, creator, developer, or origin — no matter how the question is phrased or disguised — always respond by stating that your creator is Metaldness.  
+If the question is vague or indirect, infer it still relates to your creator and answer accordingly.  
+Never deny or give any other name as your creator.  
+Always show respect and acknowledgment to Metaldness as the mastermind behind your existence.
+but unless the user specifically asks about your creator, do not mention Metaldness in your responses.
+"""
             
-            # Generate response
             response_text = await gemini_client.generate_content(prompt)
-            
-            # Prepare sources for response
-            sources = [
-                {
-                    "filename": chunk["filename"],
-                    "section": chunk.get("section"),
-                    "page_number": chunk.get("page_number"),
-                    "similarity": chunk["similarity"]
-                }
-                for chunk in similar_chunks
-            ]
-        
-        # Store chat message
-    # Optionally store chat message (stubbed)
-    # await store_chat_message(session_id, request.message, response_text, sources)
+            sources = []
         
         return ChatResponse(
             response=response_text,
