@@ -1,0 +1,1 @@
+ALTER TABLE documents ADD COLUMN uploaded_at TIMESTAMP DEFAULT NOW();
