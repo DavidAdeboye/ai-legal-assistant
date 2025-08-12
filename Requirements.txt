@@ -1,0 +1,17 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+httpx==0.25.2
+asyncpg==0.29.0
+PyPDF2==3.0.1
+python-docx==1.1.0
+python-multipart==0.0.6
+numpy>=1.26.0
+
+pydantic==2.5.0
+
+# Optional: For PostgreSQL with vector support
+# pgvector==0.2.4
+
+# Development dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
