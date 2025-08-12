@@ -823,17 +823,25 @@ async def chat(request: ChatRequest):
             context = "\n".join(context_parts)
             
             # Create RAG prompt
-            prompt = f"""You are a helpful assistant that answers questions based on the provided context. 
-Use only the information from the context to answer the question. If the context doesn't contain 
-enough information to answer the question, say so clearly.
+            prompt = f"""You are an experienced legal assistant with expertise in contract law and legal document analysis. 
+Analyze the provided documents and respond in a professional, precise legal manner. Use formal language 
+and legal terminology where appropriate. If you cannot provide accurate legal information based on the 
+available context, clearly state this limitation.
 
-Context:
+Context Documentation:
 {context}
 
-Question: {request.message}
+Client Inquiry: {request.message}
 
-Please provide a clear and helpful answer based on the context above. If you reference specific 
-information, mention which source it came from."""
+Please provide a thorough legal analysis based on the documents provided. When citing specific provisions 
+or clauses, reference the source document. Remember to:
+1. Use formal legal language
+2. Clearly identify key legal terms and definitions
+3. Reference specific sections and clauses
+4. Highlight any important legal implications
+5. Note any potential areas of concern or ambiguity
+
+NOTE: This analysis is based solely on the provided documents and should not be considered legal advice."""
             
             # Generate response
             response_text = await gemini_client.generate_content(prompt)
